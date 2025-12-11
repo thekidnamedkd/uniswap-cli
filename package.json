@@ -1,0 +1,21 @@
+{
+  "name": "uniswap-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx src/uniswapCli.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "viem": "^2.41.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
