@@ -1,3 +1,4 @@
+// src/uniswapCli.ts
 import {
   createWalletClient,
   createPublicClient,
@@ -87,7 +88,7 @@ const npmAbi = [
   },
 ] as const;
 
-type Mode = "init" | "add";
+type Mode = "init" | "add" | "wrap";
 
 function encodePriceSqrt(price: number): bigint {
   const sqrt = Math.sqrt(price);
@@ -101,7 +102,8 @@ async function askMode(rl: ReturnType<typeof createInterface>): Promise<Mode> {
         "Choose mode:",
         "[1] Initialize pool + add first liquidity",
         "[2] Add more liquidity to existing pool",
-        "Enter 1 or 2: ",
+        "[3] Wrap ETH → WETH only",
+        "Enter 1, 2, or 3: ",
       ].join("\n"),
     )
   )
@@ -109,6 +111,7 @@ async function askMode(rl: ReturnType<typeof createInterface>): Promise<Mode> {
     .toLowerCase();
 
   if (answer === "2") return "add";
+  if (answer === "3") return "wrap";
   return "init";
 }
 
@@ -121,18 +124,58 @@ async function main() {
   const rpcUrlInput = await rl.question(`RPC URL [default: ${defaultRpc}]: `);
   const rpcUrl = rpcUrlInput.trim() || defaultRpc;
 
-  const feeInput = await rl.question(
-    "Fee tier in bps (500 / 3000 / 10000) [default 10000]: ",
-  );
-  const feeTier =
-    (feeInput.trim() === "" ? 10000 : Number(feeInput.trim())) || 10000;
-
   const pkInput = await rl.question(
     "Private key (0x..., exported from your wallet): ",
   );
   let pk = pkInput.trim();
   if (!pk.startsWith("0x")) pk = `0x${pk}`;
   const privateKey = pk as Hex;
+
+  const account = privateKeyToAccount(privateKey);
+
+  const walletClient = createWalletClient({
+    account,
+    chain: sepolia,
+    transport: http(rpcUrl),
+  });
+
+  const publicClient = createPublicClient({
+    chain: sepolia,
+    transport: http(rpcUrl),
+  });
+
+  if (mode === "wrap") {
+    const wrapAmountEth =
+      (await rl.question(
+        "How much ETH to wrap into WETH? (e.g. 0.1, 0.2): ",
+      )) || "0.1";
+
+    const value = parseEther(wrapAmountEth);
+    console.log("\n=== Wrap-only mode ===");
+    console.log("RPC:", rpcUrl);
+    console.log("Account:", account.address);
+    console.log("WETH address:", WETH_ADDRESS);
+    console.log(`\nWrapping ${wrapAmountEth} ETH into WETH...`);
+
+    const wrapHash = await walletClient.writeContract({
+      address: WETH_ADDRESS,
+      abi: wethAbi,
+      functionName: "deposit",
+      args: [],
+      value,
+    });
+    console.log("  wrap tx hash:", wrapHash);
+    await publicClient.waitForTransactionReceipt({ hash: wrapHash });
+    console.log("  wrap confirmed.");
+    rl.close();
+    return;
+  }
+
+  const feeInput = await rl.question(
+    "Fee tier in bps (500 / 3000 / 10000) [default 10000]: ",
+  );
+  const feeTier =
+    (feeInput.trim() === "" ? 10000 : Number(feeInput.trim())) || 10000;
 
   const tokenAddressInput = await rl.question(
     "Existing ERC-20 token address on Sepolia (0x...): ",
@@ -175,19 +218,6 @@ async function main() {
     )) || "0.2";
 
   rl.close();
-
-  const account = privateKeyToAccount(privateKey);
-
-  const walletClient = createWalletClient({
-    account,
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
-
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http(rpcUrl),
-  });
 
   console.log("\n=== Config ===");
   console.log("Mode:", mode === "init" ? "INIT" : "ADD");
